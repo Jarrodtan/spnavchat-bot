@@ -7,7 +7,7 @@
 //   WEBHOOK_SECRET  — checked against Telegram's X-Telegram-Bot-Api-Secret-Token header
 //   LEADER_CHAT_ID  — leaders' group chat that receives follow-up alerts
 
-const MODEL = "@cf/zai-org/glm-4.7-flash";
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const TRANSLATION = "web"; // World English Bible (public domain), via bible-api.com
 const MAX_VERSES = 4;
 
