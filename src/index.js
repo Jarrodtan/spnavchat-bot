@@ -6,9 +6,12 @@
 //   BOT_TOKEN       — from @BotFather
 //   WEBHOOK_SECRET  — checked against Telegram's X-Telegram-Bot-Api-Secret-Token header
 //   LEADER_CHAT_ID  — leaders' group chat that receives follow-up alerts
+//   ESV_API_KEY     — free non-commercial key from https://api.esv.org
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const TRANSLATION = "web"; // World English Bible (public domain), via bible-api.com
+// Verse text comes from Crossway's official ESV API (free for non-commercial use)
+const ESV_PARAMS = "include-passage-references=false&include-verse-numbers=false&include-footnotes=false" +
+    "&include-headings=false&include-short-copyright=false&include-first-verse-numbers=false";
 const MAX_VERSES = 3;
 const MAX_PASSAGE = 3; // longer passages are trimmed, with a pointer to read the rest
 
@@ -119,12 +122,18 @@ async function classify(env, question) {
 }
 
 // Looks up the real text so the bot never quotes a verse the model made up
-async function fetchVerse(ref) {
-    const res = await fetch(`https://bible-api.com/${encodeURIComponent(ref)}?translation=${TRANSLATION}`);
-    if (!res.ok) return null;
+async function fetchVerse(env, ref) {
+    const res = await fetch(`https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(ref)}&${ESV_PARAMS}`, {
+        headers: { Authorization: `Token ${env.ESV_API_KEY}` },
+    });
+    if (!res.ok) {
+        console.error(`ESV lookup failed for ${ref}: ${res.status}`);
+        return null;
+    }
     const data = await res.json();
-    if (!data.text) return null;
-    return { ref: data.reference, text: data.text.trim().replace(/\s+/g, " ") };
+    const text = data.passages?.[0]?.trim();
+    if (!text) return null;
+    return { ref: data.canonical, text: text.replace(/\s+/g, " ") };
 }
 
 // "Matthew 6:25-34" -> fetch "Matthew 6:25-27" and point to the full passage
@@ -134,17 +143,17 @@ function trimRef(ref) {
     return { fetchRef: `${m[1]}:${m[2]}-${+m[2] + MAX_PASSAGE - 1}`, full: ref };
 }
 
-async function answerWithVerses(refs) {
+async function answerWithVerses(env, refs) {
     const found = await Promise.all(refs.map(async r => {
         const { fetchRef, full } = trimRef(r.ref);
-        const v = await fetchVerse(fetchRef);
+        const v = await fetchVerse(env, fetchRef);
         if (!v) return null;
         const more = full ? `\n📚 Read the full passage: ${full}` : "";
         return `📖 ${v.ref}\n"${v.text}"\n— ${r.why}${more}`;
     }));
     const parts = found.filter(Boolean);
     if (!parts.length) return FALLBACK_REPLY;
-    return parts.join("\n\n") + "\n\n(WEB translation. Want to talk it through? Your discipler would love to hear from you 🙏)";
+    return parts.join("\n\n") + "\n\n(ESV. Want to talk it through? Your discipler would love to hear from you 🙏)";
 }
 
 // ============================================================
@@ -183,7 +192,7 @@ async function handleMessage(env, msg) {
             await send(env, chatId, PERSONAL_REPLY);
             return alertLeaders(env, msg.from, text, "personal");
         case "verses":
-            return send(env, chatId, await answerWithVerses(result.refs));
+            return send(env, chatId, await answerWithVerses(env, result.refs));
         default:
             return send(env, chatId, HELLO_REPLY);
     }

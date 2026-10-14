@@ -8,4 +8,5 @@
   //   BOT_TOKEN       — from @BotFather for @spnavchat_bot
   //   WEBHOOK_SECRET  — any random string; Telegram sends it back on every update
   //   LEADER_CHAT_ID  — Telegram chat id of the leaders' group that gets follow-up alerts
+  //   ESV_API_KEY     — free non-commercial key from https://api.esv.org
 }
