@@ -1,0 +1,11 @@
+{
+  "name": "spnavchat-bot",
+  "main": "src/index.js",
+  "workers_dev": true,
+  "compatibility_date": "2026-06-18",
+  "ai": { "binding": "AI" }
+  // Secrets (set with `npx wrangler secret put NAME`):
+  //   BOT_TOKEN       — from @BotFather for @spnavchat_bot
+  //   WEBHOOK_SECRET  — any random string; Telegram sends it back on every update
+  //   LEADER_CHAT_ID  — Telegram chat id of the leaders' group that gets follow-up alerts
+}
