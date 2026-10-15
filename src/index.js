@@ -85,8 +85,10 @@ async function tg(env, method, body) {
     return res;
 }
 
-const send = (env, chatId, text) =>
-    tg(env, "sendMessage", { chat_id: chatId, text, disable_web_page_preview: true });
+const send = (env, chatId, text, extra = {}) =>
+    tg(env, "sendMessage", { chat_id: chatId, text, disable_web_page_preview: true, ...extra });
+
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 async function alertLeaders(env, from, question, kind) {
     if (!env.LEADER_CHAT_ID) return;
@@ -165,10 +167,12 @@ async function answerWithVerses(env, refs) {
         const v = await fetchVerse(env, fetchRef);
         if (!v) return null;
         const more = full ? `\n📚 Read the full passage: ${full}` : "";
-        return `📖 ${v.ref}\n"${v.text}"\n— ${r.why}${more}`;
+        // Linking out is fine; the NIV text itself is licensed by Biblica, so it's never shown here
+        const niv = `https://www.biblegateway.com/passage/?search=${encodeURIComponent(full || v.ref)}&version=NIV`;
+        return `📖 ${esc(v.ref)}\n"${esc(v.text)}"\n— ${esc(r.why)}${esc(more)}\n🔗 <a href="${esc(niv)}">Read in NIV</a>`;
     }));
     const parts = found.filter(Boolean);
-    if (!parts.length) return FALLBACK_REPLY;
+    if (!parts.length) return esc(FALLBACK_REPLY);
     const version = env.ESV_API_KEY ? "ESV" : "WEB translation";
     return parts.join("\n\n") + `\n\n(${version}. Want to talk it through? Your discipler would love to hear from you 🙏)`;
 }
@@ -282,7 +286,7 @@ async function handleMessage(env, msg) {
             await send(env, chatId, PERSONAL_REPLY);
             return alertLeaders(env, msg.from, text, "personal");
         case "verses":
-            return send(env, chatId, await answerWithVerses(env, result.refs));
+            return send(env, chatId, await answerWithVerses(env, result.refs), { parse_mode: "HTML" });
         default:
             return send(env, chatId, HELLO_REPLY);
     }
