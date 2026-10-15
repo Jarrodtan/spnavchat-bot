@@ -2,7 +2,6 @@
 
 A 24/7 Telegram bot that helps SP Navigators members find Bible verses.
 
-- 📖 Topic/doctrine questions → real verse text (ESV via the official ESV API once `ESV_API_KEY` is set, WEB until then; never written by the AI)
 - 🙋 Personal/life questions → gentle reply + alert to the leaders' group
 - 🆘 Crisis words → fixed helpline message + urgent alert (checked before the AI)
 - 🔑 Members only: new people get an Approve / Decline request in the leaders' group (crisis help still goes to everyone)
@@ -15,7 +14,6 @@ Runs on a Cloudflare Worker with Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp
 1. `npm install`
 2. Set the secrets:
    - `npx wrangler secret put BOT_TOKEN` — token from @BotFather
-   - `npx wrangler secret put ESV_API_KEY` — free key from https://api.esv.org (non-commercial use)
    - `npx wrangler secret put WEBHOOK_SECRET` — any long random string (letters, numbers, `_` `-`)
    - `npx wrangler secret put LEADER_CHAT_ID` — the leaders' group chat id (starts with `-100…`)
 3. `npx wrangler deploy` and note the `*.workers.dev` URL
