@@ -2,12 +2,13 @@
 
 A 24/7 Telegram bot that helps SP Navigators members find Bible verses.
 
-- 📖 Topic/doctrine questions → real verse text (ESV, looked up from the official ESV API, never written by the AI)
+- 📖 Topic/doctrine questions → real verse text (ESV via the official ESV API once `ESV_API_KEY` is set, WEB until then; never written by the AI)
 - 🙋 Personal/life questions → gentle reply + alert to the leaders' group
 - 🆘 Crisis words → fixed helpline message + urgent alert (checked before the AI)
+- 🔑 Members only: new people get an Approve / Decline request in the leaders' group (crisis help still goes to everyone)
 - Never speaks for God or gives personal advice
 
-Runs on a Cloudflare Worker with Workers AI (`@cf/zai-org/glm-4.7-flash`).
+Runs on a Cloudflare Worker with Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`).
 
 ## Setup
 

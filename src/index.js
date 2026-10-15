@@ -6,7 +6,10 @@
 //   BOT_TOKEN       — from @BotFather
 //   WEBHOOK_SECRET  — checked against Telegram's X-Telegram-Bot-Api-Secret-Token header
 //   LEADER_CHAT_ID  — leaders' group chat that receives follow-up alerts
-//   ESV_API_KEY     — free non-commercial key from https://api.esv.org
+//   ESV_API_KEY     — free non-commercial key from https://api.esv.org (WEB is used until it's set)
+//
+// Access: only members a leader has approved can use the bot. New people get an
+// Approve / Decline request in the leaders' group. Crisis replies go to everyone.
 
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 // Verse text comes from Crossway's official ESV API (free for non-commercial use)
@@ -123,6 +126,19 @@ async function classify(env, question) {
 
 // Looks up the real text so the bot never quotes a verse the model made up
 async function fetchVerse(env, ref) {
+    return env.ESV_API_KEY ? fetchEsv(env, ref) : fetchWeb(ref);
+}
+
+// World English Bible (public domain), used until the ESV key is approved
+async function fetchWeb(ref) {
+    const res = await fetch(`https://bible-api.com/${encodeURIComponent(ref)}?translation=web`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.text) return null;
+    return { ref: data.reference, text: data.text.trim().replace(/\s+/g, " ") };
+}
+
+async function fetchEsv(env, ref) {
     const res = await fetch(`https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(ref)}&${ESV_PARAMS}`, {
         headers: { Authorization: `Token ${env.ESV_API_KEY}` },
     });
@@ -153,7 +169,78 @@ async function answerWithVerses(env, refs) {
     }));
     const parts = found.filter(Boolean);
     if (!parts.length) return FALLBACK_REPLY;
-    return parts.join("\n\n") + "\n\n(ESV. Want to talk it through? Your discipler would love to hear from you 🙏)";
+    const version = env.ESV_API_KEY ? "ESV" : "WEB translation";
+    return parts.join("\n\n") + `\n\n(${version}. Want to talk it through? Your discipler would love to hear from you 🙏)`;
+}
+
+// ============================================================
+// ACCESS (leader approval)
+// ============================================================
+
+const PENDING_REPLY =
+    "👋 Hi! NavChat is for SP Navigators members.\n\n" +
+    "I've asked a leader to approve you — I'll message you here once they do 🙏";
+
+const STILL_PENDING_REPLY = "⏳ Still waiting for a leader to approve you. I'll message you here once they do 🙏";
+
+const DECLINED_REPLY = "Sorry, NavChat is only for SP Navigators members. If you think this is a mistake, please talk to a leader 🙏";
+
+const APPROVED_REPLY = "✅ You're approved! Welcome to NavChat.\n\n";
+
+const displayName = from =>
+    [from.first_name, from.last_name].filter(Boolean).join(" ") + (from.username ? ` (@${from.username})` : "");
+
+const getUser = (env, id) => env.USERS.get(`user:${id}`, "json");
+const putUser = (env, id, data) => env.USERS.put(`user:${id}`, JSON.stringify(data));
+
+// Returns true if the person may use the bot; otherwise replies and handles the request
+async function checkAccess(env, msg) {
+    const user = await getUser(env, msg.from.id);
+    if (user?.status === "approved") return true;
+    if (user?.status === "declined") {
+        await send(env, msg.chat.id, DECLINED_REPLY);
+        return false;
+    }
+    if (user?.status === "pending") {
+        await send(env, msg.chat.id, STILL_PENDING_REPLY);
+        return false;
+    }
+
+    await putUser(env, msg.from.id, { status: "pending", name: displayName(msg.from), requestedAt: Date.now() });
+    await send(env, msg.chat.id, PENDING_REPLY);
+    await tg(env, "sendMessage", {
+        chat_id: env.LEADER_CHAT_ID,
+        text: `🔑 Access request — NavChat\n\n${displayName(msg.from)} wants to use NavChat.\n\nIs this an SP Navigators member?`,
+        reply_markup: {
+            inline_keyboard: [[
+                { text: "✅ Approve", callback_data: `approve:${msg.from.id}` },
+                { text: "❌ Decline", callback_data: `decline:${msg.from.id}` },
+            ]],
+        },
+    });
+    return false;
+}
+
+// A leader tapped Approve or Decline in the leaders' group
+async function handleDecision(env, query) {
+    const [action, userId] = String(query.data || "").split(":");
+    const fromLeaders = String(query.message?.chat?.id) === String(env.LEADER_CHAT_ID);
+    if (!fromLeaders || !["approve", "decline"].includes(action) || !userId) {
+        return tg(env, "answerCallbackQuery", { callback_query_id: query.id, text: "Not allowed." });
+    }
+
+    const user = await getUser(env, userId) || {};
+    const status = action === "approve" ? "approved" : "declined";
+    await putUser(env, userId, { ...user, status, decidedBy: displayName(query.from), decidedAt: Date.now() });
+
+    const outcome = status === "approved" ? "✅ Approved" : "❌ Declined";
+    await tg(env, "editMessageText", {
+        chat_id: query.message.chat.id,
+        message_id: query.message.message_id,
+        text: `🔑 Access request — NavChat\n\n${user.name || userId}\n\n${outcome} by ${displayName(query.from)}`,
+    });
+    await tg(env, "answerCallbackQuery", { callback_query_id: query.id, text: outcome });
+    await send(env, userId, status === "approved" ? APPROVED_REPLY + WELCOME : DECLINED_REPLY);
 }
 
 // ============================================================
@@ -165,12 +252,15 @@ async function handleMessage(env, msg) {
     const text = (msg.text || "").trim();
     if (msg.chat.type !== "private" || !text) return;
 
-    if (text === "/start" || text === "/help") return send(env, chatId, WELCOME);
-
+    // Crisis help goes to everyone, approved or not
     if (isCrisis(text)) {
         await send(env, chatId, CRISIS_REPLY);
         return alertLeaders(env, msg.from, text, "crisis");
     }
+
+    if (!(await checkAccess(env, msg))) return;
+
+    if (text === "/start" || text === "/help") return send(env, chatId, WELCOME);
 
     if (SMALL_TALK.test(text)) return send(env, chatId, HELLO_REPLY);
 
@@ -206,6 +296,7 @@ export default {
         }
         const update = await request.json();
         if (update.message) ctx.waitUntil(handleMessage(env, update.message).catch(console.error));
+        if (update.callback_query) ctx.waitUntil(handleDecision(env, update.callback_query).catch(console.error));
         return new Response("OK");
     },
 };
