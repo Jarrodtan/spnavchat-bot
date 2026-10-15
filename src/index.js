@@ -10,10 +10,8 @@
 // Access: only members a leader has approved can use the bot. New people get an
 // Approve / Decline request in the leaders' group. Crisis replies go to everyone.
 
-const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const TRANSLATION = "web"; // World English Bible (public domain), via bible-api.com
+const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"; // small model: far more free questions per day
 const MAX_VERSES = 3;
-const MAX_PASSAGE = 3; // longer passages are trimmed, with a pointer to read the rest
 const LINK_VERSIONS = ["NIV", "ESV", "NASB"]; // BibleGateway links under each verse
 
 // ============================================================
@@ -65,7 +63,7 @@ Rules:
 - "crisis": any sign of self-harm, abuse, danger, or deep distress. refs must be [].
 - "other": greetings or anything unrelated to the Bible. refs must be [].
 - Never claim to speak for God or the Holy Spirit. Never give personal advice.
-- Prefer short references (1-3 verses), not whole chapters.
+- Prefer short references (1-5 verses), not whole chapters.
 - "why" is at most 6 words and only says what the verse is about. No interpretation of the user's situation.
 - When unsure between "verses" and "personal", choose "personal".`;
 
@@ -124,38 +122,30 @@ async function classify(env, question) {
     return { type: data.type, refs: Array.isArray(data.refs) ? data.refs.slice(0, MAX_VERSES) : [] };
 }
 
-// Looks up the real text so the bot never quotes a verse the model made up
-async function fetchVerse(ref) {
-    const res = await fetch(`https://bible-api.com/${encodeURIComponent(ref)}?translation=${TRANSLATION}`);
+// Checks the reference really exists, so the bot never links to a verse the model made up.
+// Only the cleaned-up reference is used; no verse text is shown.
+async function checkRef(ref) {
+    const res = await fetch(`https://bible-api.com/${encodeURIComponent(ref)}?translation=web`);
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data.text) return null;
-    return { ref: data.reference, text: data.text.trim().replace(/\s+/g, " ") };
-}
-
-// "Matthew 6:25-34" -> fetch "Matthew 6:25-27" and point to the full passage
-function trimRef(ref) {
-    const m = ref.match(/^(.+?\d+):(\d+)-(\d+)$/);
-    if (!m || +m[3] - +m[2] + 1 <= MAX_PASSAGE) return { fetchRef: ref, full: null };
-    return { fetchRef: `${m[1]}:${m[2]}-${+m[2] + MAX_PASSAGE - 1}`, full: ref };
+    return data.text ? data.reference : null;
 }
 
 async function answerWithVerses(env, refs) {
     const found = await Promise.all(refs.map(async r => {
-        const { fetchRef, full } = trimRef(r.ref);
-        const v = await fetchVerse(fetchRef);
-        if (!v) return null;
-        const more = full ? `\n📚 Read the full passage: ${full}` : "";
-        // Linking out is fine; these versions are licensed by their publishers, so their text is never shown here
+        const ref = await checkRef(r.ref);
+        if (!ref) return null;
+        // Links only: these versions are licensed by their publishers, so their text is never copied here
         const links = LINK_VERSIONS.map(ver => {
-            const url = `https://www.biblegateway.com/passage/?search=${encodeURIComponent(full || v.ref)}&version=${ver}`;
+            const url = `https://www.biblegateway.com/passage/?search=${encodeURIComponent(ref)}&version=${ver}`;
             return `<a href="${esc(url)}">${ver}</a>`;
         }).join(" · ");
-        return `📖 ${esc(v.ref)}\n"${esc(v.text)}"\n— ${esc(r.why)}${esc(more)}\n🔗 Read in: ${links}`;
+        return `📖 <b>${esc(ref)}</b> — ${esc(r.why)}\n🔗 ${links}`;
     }));
     const parts = found.filter(Boolean);
     if (!parts.length) return esc(FALLBACK_REPLY);
-    return parts.join("\n\n") + `\n\n(WEB translation. Want to talk it through? Your discipler would love to hear from you 🙏)`;
+    return "Here are some verses to read:\n\n" + parts.join("\n\n") +
+        "\n\nWant to talk it through? Your discipler would love to hear from you 🙏";
 }
 
 // ============================================================

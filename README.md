@@ -7,7 +7,7 @@ A 24/7 Telegram bot that helps SP Navigators members find Bible verses.
 - 🔑 Members only: new people get an Approve / Decline request in the leaders' group (crisis help still goes to everyone)
 - Never speaks for God or gives personal advice
 
-Runs on a Cloudflare Worker with Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`).
+Runs on a Cloudflare Worker with Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`).
 
 ## Setup
 
