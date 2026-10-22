@@ -2,6 +2,8 @@
 
 A 24/7 Telegram bot that helps SP Navigators members find Bible verses.
 
+> 🚧 **Status:** In development. Phase 1 (verse lookup, leader escalation, crisis safety) and members-only approval are done, and improvements are ongoing.
+
 - 🙋 Personal/life questions → gentle reply + alert to the leaders' group
 - 🆘 Crisis words → fixed helpline message + urgent alert (checked before the AI)
 - 🔑 Members only: new people get an Approve / Decline request in the leaders' group (crisis help still goes to everyone)
