@@ -9,6 +9,18 @@ A 24/7 Telegram bot that helps SP Navigators members find Bible verses.
 
 Runs on a Cloudflare Worker with Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`).
 
+## How it works
+
+- **Serverless webhook:** Telegram pushes each update to a Cloudflare Worker, which is verified with a secret header, so there's no server to keep running.
+- **Safety first:** crisis keywords are checked *before* any AI call, so a fixed helpline reply is guaranteed and never depends on the model.
+- **Human in the loop:** personal questions and new member requests go to a leaders' group with inline Approve / Decline buttons.
+- **Member storage:** approved, pending and declined users are stored in Cloudflare KV.
+- **Secrets** (bot token, webhook secret, chat IDs) live in Worker secrets and are never committed to the repo.
+
+**Tech:** JavaScript · Cloudflare Workers · Workers AI (Llama 3.1) · Cloudflare KV · Telegram Bot API
+
+I designed and built the bot end-to-end for SP Navigators.
+
 ## Setup
 
 1. `npm install`
